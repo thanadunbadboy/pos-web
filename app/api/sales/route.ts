@@ -1,21 +1,17 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json()
-    const { items } = body
-    type SaleItemType = {
-  unitPrice: number
-  quantity: number
-}
 
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: 'รายการสินค้าไม่ถูกต้อง' },
-        { status: 400 }
-      )
-    }
+export async function POST(request: Request) {
+  const data = await request.json()
+  const items: SaleItem[] = data.items
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return NextResponse.json(
+      { error: 'รายการสินค้าไม่ถูกต้อง' },
+      { status: 400 }
+    )
+  }
 
     // คำนวณ totalAmount
   const totalAmount = items.reduce(

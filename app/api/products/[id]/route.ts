@@ -17,7 +17,7 @@ export async function DELETE(
     return NextResponse.json(deleted)
   } catch  {
   
-  // handle error
+  
 }
 }
 export async function PUT(
@@ -27,7 +27,7 @@ export async function PUT(
   const { id } = params
   const { name, price, stock } = await req.json()
   if (!name || price == null || stock == null) {
-    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    return NextResponse.json({ }, { status: 400 })
   }
 
   try {

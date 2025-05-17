@@ -26,12 +26,16 @@ model Sale {
   items       SaleItem[]
 }
 
+
 model SaleItem {
   id        String  @id @default(uuid())
-  
   saleId    String
-  product   Product @relation(fields: [productId], references: [id])
+  sale      Sale    @relation(fields: [saleId], references: [id])
+  
   productId String
+  product   Product @relation(fields: [productId], references: [id])
+
   quantity  Int
-  unitPrice Int     // ราคาต่อหน่วย ณ เวลาขาย
+  unitPrice Int
 }
+
