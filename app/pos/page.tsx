@@ -1,234 +1,243 @@
 'use client'
+import React, { useState, useEffect } from 'react'
 
-import { useEffect, useState } from 'react'
-
-type Product = {
+interface Product {
   id: string
   name: string
-  price: number
+  price: number   // เก็บเป็นสตางค์
   stock: number
 }
 
-type CartItem = {
-  productId: string
+interface CartItem {
+  id: string
   name: string
   price: number
   quantity: number
 }
 
-export default function POSPage() {
-  const [products, setProducts] = useState<Product[]>([])
-  const [cart, setCart] = useState<CartItem[]>([])
-
-  useEffect(() => {
-    fetch('/api/products')
-      .then((res) => res.json())
-      .then((data) => setProducts(data))
-  }, [])
-
-  const handleAddToCart = (product: Product) => {
-    // เช็คว่าใน cart มีอยู่แล้วไหม
-    const exists = cart.find((item) => item.productId === product.id)
-    if (exists) {
-      // ถ้ายังมี stock เหลือ → เพิ่ม
-      const stockLeft = product.stock - exists.quantity
-      if (stockLeft <= 0) return alert('สต็อกไม่พอแล้ว')
-
-      setCart((prev) =>
-        prev.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        )
-      )
-    } else {
-      if (product.stock <= 0) return alert('สินค้าหมด')
-      setCart((prev) => [
-        ...prev,
-        {
-          productId: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: 1,
-        },
-      ])
-    }
-  }
-
-  // คำนวณจำนวนที่เลือกแล้วแต่ละชิ้น
-  const getCartQuantity = (productId: string) => {
-    return cart.find((item) => item.productId === productId)?.quantity || 0
-  }
-  const handleConfirmSale = async () => {
-  if (cart.length === 0) {
-    alert('กรุณาเพิ่มสินค้าก่อนยืนยันการขาย')
-    return
-  }
-
-  try {
-    // เตรียมข้อมูล saleItems สำหรับส่งไป API
-    const saleItems = cart.map((item) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-      unitPrice: item.price,
-    }))
-
-    const res = await fetch('/api/sales', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: saleItems }),
-    })
-
-    if (!res.ok) {
-      const data = await res.json()
-      alert('ขายไม่สำเร็จ: ' + (data.error || 'เกิดข้อผิดพลาด'))
-      return
-    }
-
-    alert('ขายสำเร็จ!')
-
-    // เคลียร์ตะกร้า
-    setCart([])
-
-    // รีเฟรชสินค้า เพื่ออัปเดต stock ใหม่
-    const productsRes = await fetch('/api/products')
-    const productsData = await productsRes.json()
-    setProducts(productsData)
-  } catch (error) {
-    alert('เกิดข้อผิดพลาด: ' + error)
+interface SaleResponse {
+  sale: {
+    id: string
+    createdAt: string
+    totalAmount: number
+    items: {
+      id: string
+      productId: string
+      quantity: number
+      unitPrice: number
+    }[]
   }
 }
 
+const POS: React.FC = () => {
+  const [products, setProducts] = useState<Product[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [receipt, setReceipt] = useState<SaleResponse['sale'] | null>(null)
+
+ useEffect(() => {
+  fetch('/api/products')
+    .then(async (res) => {
+      if (!res.ok) throw new Error('ไม่สามารถโหลดสินค้าได้')
+      const data = await res.json()
+      // ถ้า API คืนค่าเป็น array ตรง ๆ
+      setProducts(data)  
+      // ถ้าคืนค่าใน object ใช้ data.products ตามเดิม
+    })
+    .catch(() => alert('ไม่สามารถโหลดสินค้าได้'))
+}, [])
+
+  const addToCart = (product: Product) => {
+    setCart((prev) => {
+      const exist = prev.find((item) => item.id === product.id)
+      if (exist) {
+        if (exist.quantity < product.stock) {
+          return prev.map((item) =>
+            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          )
+        } else {
+          alert('สินค้าหมดสต็อกแล้ว')
+          return prev
+        }
+      } else {
+        if (product.stock > 0) {
+          return [...prev, { id: product.id, name: product.name, price: product.price, quantity: 1 }]
+        } else {
+          alert('สินค้าหมดสต็อกแล้ว')
+          return prev
+        }
+      }
+    })
+  }
+
+  const decreaseQuantity = (id: string) => {
+    setCart((prev) =>
+      prev
+        .map((item) => (item.id === id ? { ...item, quantity: item.quantity - 1 } : item))
+        .filter((item) => item.quantity > 0)
+    )
+  }
+
+  const removeFromCart = (id: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  const totalPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+  const handleConfirmSale = async () => {
+    if (cart.length === 0) {
+      alert('ตะกร้าว่าง')
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch('/api/sales', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map((item) => ({
+            productId: item.id,       // ตาม schema ของคุณ
+            quantity: item.quantity,
+            unitPrice: item.price,
+          })),
+        }),
+      })
+      if (!res.ok) throw new Error('ขายไม่สำเร็จ')
+      const data: SaleResponse = await res.json()
+      setReceipt(data.sale)
+      setCart([])
+    } catch (error) {
+      alert('ขายไม่สำเร็จ')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (receipt) {
+    return (
+      <div className="p-4 max-w-4xl mx-auto">
+        <h2 className="text-xl font-bold mb-2">ใบเสร็จ</h2>
+        <div>รหัสขาย: {receipt.id}</div>
+        <div>วันที่: {new Date(receipt.createdAt).toLocaleString()}</div>
+        <div>ยอดรวม: {(receipt.totalAmount / 100).toFixed(2)} ฿</div>
+        <h3 className="mt-4 font-semibold">รายการสินค้า</h3>
+        <ul>
+         {receipt.items && receipt.items.length > 0 ? (
+  receipt.items.map((item) => (
+    <li key={item.id}>
+      สินค้า ID: {item.productId} | จำนวน: {item.quantity} | ราคาต่อหน่วย: {(item.unitPrice / 100).toFixed(2)} ฿
+    </li>
+  ))
+) : (
+  <li>ไม่มีรายการสินค้า</li>
+)}  
+        </ul>
+        <button
+          onClick={() => setReceipt(null)}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          ขายสินค้าใหม่
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className="p-4">
-      <h1 className="text-2xl font-bold mb-4">ขายสินค้า</h1>
+    <div className="p-4 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">POS - ขายสินค้า</h1>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {products.map((product) => {
-          const inCartQty = getCartQuantity(product.id)
-          const stockLeft = product.stock - inCartQty
-
-          return (
-            <div key={product.id} className="border rounded p-3">
-              <p className="font-medium">{product.name}</p>
-              <p className="text-sm text-gray-500">
-                ราคา: {(product.price / 100).toFixed(2)} บาท
-              </p>
-              <p
-                className={`text-sm ${
-                  stockLeft <= 0 ? 'text-red-500' : 'text-green-600'
-                }`}
-              >
-                สต็อก: {stockLeft}
-              </p>
-              <button
-                className="mt-2 bg-blue-500 text-white text-sm px-2 py-1 rounded disabled:opacity-50"
-                onClick={() => handleAddToCart(product)}
-                disabled={stockLeft <= 0}
-              >
-                หยิบใส่ตะกร้า
-              </button>
-            </div>
-          )
-        })}
-      </div>
-      <div className="mt-8 border-t pt-4">
-  <h2 className="text-xl font-semibold mb-2">ตะกร้า</h2>
-
-  {cart.length === 0 ? (
-    <p className="text-gray-500">ยังไม่มีสินค้า</p>
-  ) : (
-    <ul className="space-y-3">
-      {cart.map((item) => (
-        <li key={item.productId} className="flex items-center justify-between">
+      <div className="grid grid-cols-2 gap-8">
+        {/* สินค้า */}
+        <div>
+          <h2 className="text-xl font-semibold mb-2">สินค้า</h2>
+          <ul>
+            <ul>
+      {products.map((product) => (
+        <li
+          key={product.id}
+          className="flex justify-between items-center p-2 border mb-2 rounded"
+        >
           <div>
-            <p className="font-medium">{item.name}</p>
-            <p className="text-sm text-gray-500">
-              {item.quantity} × {(item.price / 100).toFixed(2)} ={' '}
-              {((item.quantity * item.price) / 100).toFixed(2)} บาท
-            </p>
+            <div className="font-medium">{product.name}</div>
+            <div className="text-sm text-gray-600">
+              {(product.price / 100).toFixed(2)} ฿ - สต็อก {product.stock}
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                setCart((prev) =>
-                  prev.map((p) =>
-                    p.productId === item.productId
-                      ? { ...p, quantity: p.quantity + 1 }
-                      : p
-                  )
-                )
-              }
-              className="bg-green-500 text-white px-2 rounded"
-            >
-              +
-            </button>
-            <button
-              onClick={() => {
-                const found = cart.find((p) => p.productId === item.productId)
-                if (!found) return
-                if (found.quantity <= 1) {
-                  setCart((prev) =>
-                    prev.filter((p) => p.productId !== item.productId)
-                  )
-                } else {
-                  setCart((prev) =>
-                    prev.map((p) =>
-                      p.productId === item.productId
-                        ? { ...p, quantity: p.quantity - 1 }
-                        : p
-                    )
-                  )
-                }
-              }}
-              className="bg-yellow-500 text-white px-2 rounded"
-            >
-              -
-            </button>
-            <button
-              onClick={() =>
-                setCart((prev) =>
-                  prev.filter((p) => p.productId !== item.productId)
-                )
-              }
-              className="bg-red-500 text-white px-2 rounded"
-            >
-              ❌
-            </button>
-          </div>
+          <button
+            onClick={() => addToCart(product)}
+            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+            disabled={product.stock === 0}
+          >
+            หยิบใส่ตะกร้า
+          </button>
         </li>
       ))}
     </ul>
-  )}
-</div>
-<button
-  onClick={handleConfirmSale}
-  disabled={cart.length === 0}
-  className="mt-4 bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50"
->
-  ยืนยันการขาย
-</button>
-
-
-      {/* แสดงตะกร้าด้านล่าง */}
-      <div className="mt-8 border-t pt-4">
-        <h2 className="text-xl font-semibold mb-2">ตะกร้า</h2>
-        {cart.length === 0 ? (
-          <p className="text-gray-500">ยังไม่มีสินค้า</p>
-        ) : (
-          <ul className="space-y-2">
-            {cart.map((item) => (
-              <li key={item.productId}>
-                {item.name} × {item.quantity} ={' '}
-                {(item.quantity * item.price / 100).toFixed(2)} บาท
-              </li>
-            ))}
           </ul>
-        )}
+        </div>
+
+        {/* ตะกร้าสินค้า */}
+        <div>
+          <h2 className="text-xl font-semibold mb-2">ตะกร้าสินค้า</h2>
+          {cart.length === 0 ? (
+            <p>ตะกร้าว่าง</p>
+          ) : (
+            <ul>
+              {cart.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex justify-between items-center p-2 border mb-2 rounded"
+                >
+                  <div>
+                    <div>{item.name}</div>
+                    <div className="text-sm text-gray-600">
+                      {(item.price / 100).toFixed(2)} ฿ x {item.quantity}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => decreaseQuantity(item.id)}
+                      className="px-2 py-0.5 bg-yellow-400 rounded"
+                    >
+                      -
+                    </button>
+                    <button
+                      onClick={() => {
+                        const product = products.find((p) => p.id === item.id)
+                        if (product) addToCart(product)
+                      }}
+                      className="px-2 py-0.5 bg-yellow-400 rounded"
+                      disabled={
+                        products.find((p) => p.id === item.id)?.stock === item.quantity
+                      }
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="px-2 py-0.5 bg-red-600 text-white rounded"
+                    >
+                      ลบ
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-4 font-bold">
+            ราคารวม: {(totalPrice / 100).toFixed(2)} ฿
+          </div>
+          <button
+            onClick={handleConfirmSale}
+            disabled={loading || cart.length === 0}
+            className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+          >
+            {loading ? 'กำลังบันทึก...' : 'ยืนยันการขาย'}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
+export default POS

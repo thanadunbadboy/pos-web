@@ -50,3 +50,22 @@ export async function POST(request: Request) {
     )
   }
 }
+
+export async function GET() {
+  try {
+    const topProducts = await prisma.saleItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: 10,
+      include: {
+        product: true,
+      },
+    })
+
+    return NextResponse.json({ topProducts })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json({ error: 'ไม่สามารถดึงข้อมูลได้' }, { status: 500 })
+  }
+}
