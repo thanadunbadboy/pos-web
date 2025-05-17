@@ -16,8 +16,9 @@ export async function DELETE(
     })
     return NextResponse.json(deleted)
   } catch (error) {
-    return NextResponse.json({ error: "Product not found" }, { status: 404 })
-  }
+  console.error(error);
+  // handle error
+}
 }
 export async function PUT(
   req: Request,
