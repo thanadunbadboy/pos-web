@@ -24,15 +24,27 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   const { id } = params
-  const data = await req.json()
+  const { name, price, stock } = await req.json()
+  if (!name || price == null || stock == null) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
 
   try {
     const updated = await prisma.product.update({
       where: { id },
-      data,
+      data: { name, price, stock },
     })
     return NextResponse.json(updated)
   } catch {
     return NextResponse.json({ error: "Product not found" }, { status: 404 })
   }
+}
+// app/api/products/route.ts
+
+
+export async function GET() {
+  const products = await prisma.product.findMany({
+    orderBy: { name: 'asc' },
+  })
+  return NextResponse.json(products)
 }
