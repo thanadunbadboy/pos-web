@@ -5,6 +5,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const { items } = body
+    type SaleItemType = {
+  unitPrice: number
+  quantity: number
+}
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -14,17 +18,17 @@ export async function POST(request: Request) {
     }
 
     // คำนวณ totalAmount
-    const totalAmount = items.reduce(
-      (sum: number, item: any) => sum + item.unitPrice * item.quantity,
-      0
-    )
+  const totalAmount = items.reduce(
+  (sum: number, item: SaleItemType) => sum + item.unitPrice * item.quantity,
+  0
+)
 
     // สร้าง Transaction ขายพร้อมรายการสินค้า
     const sale = await prisma.sale.create({
       data: {
         totalAmount,
         items: {
-          create: items.map((item: any) => ({
+          create: items.map((item:number) => ({
             productId: item.productId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,

@@ -15,8 +15,8 @@ export async function DELETE(
       where: { id },
     })
     return NextResponse.json(deleted)
-  } catch (error) {
-  console.error(error);
+  } catch  {
+  
   // handle error
 }
 }
